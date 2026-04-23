@@ -1,31 +1,20 @@
-# Core backend
 fastapi
 uvicorn[standard]
-# Database
-psycopg2-binary
-# Telegram
-python-telegram-bot[all]
-# Audio
-pydub
-soundfile
-torchaudio
-# Scheduling
-APScheduler
-# AI / model tooling
+python-dotenv
+requests
+twilio
+librosa
+numpy
 torch
 transformers
 huggingface_hub[cli]
 sentencepiece
-# Optional but commonly needed with HF models
-accelerate
-numpy
-
-torch
-torchaudio
-transformers
-huggingface_hub
-accelerate
-sentencepiece
+pydub
 soundfile
 scipy
+accelerate
+torchaudio
+psycopg2-binary
+python-telegram-bot[all]
+APScheduler
 TTS
