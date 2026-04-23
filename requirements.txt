@@ -7,14 +7,9 @@ librosa
 numpy
 torch
 transformers
-huggingface_hub[cli]
 sentencepiece
 pydub
 soundfile
 scipy
 accelerate
 torchaudio
-psycopg2-binary
-python-telegram-bot[all]
-APScheduler
-TTS
