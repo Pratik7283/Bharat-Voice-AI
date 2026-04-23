@@ -5,11 +5,17 @@ import logging
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from config import settings
-from whatsapp import build_twiml_reply, download_media, extract_first_media, parse_language_hint
+from whatsapp import (
+    build_twiml_reply,
+    download_media,
+    extract_first_media,
+    parse_language_hint,
+    send_whatsapp_message,
+)
 
 
 logging.basicConfig(level=logging.INFO)
@@ -34,14 +40,57 @@ def root() -> dict[str, object]:
     }
 
 
+@app.post("/")
+async def root_post(request: Request) -> Response:
+    # Fallback for cases where the sandbox webhook is configured to the bare domain.
+    return await _handle_whatsapp_webhook(request)
+
+
 @app.on_event("startup")
 def log_webhook_configuration() -> None:
+    settings.validate()
     if settings.public_webhook_url:
         logger.info("Twilio WhatsApp Sandbox inbound URL should point to: %s", settings.public_webhook_url)
     else:
         logger.warning(
             "PUBLIC_WEBHOOK_URL is not set. Twilio WhatsApp Sandbox cannot reach a localhost URL."
         )
+
+
+def process_voice_note_audio(media, sender_number: str, active_language: str | None) -> None:
+    from asr import get_asr_service
+
+    logger.info("Processing voice note from %s", sender_number)
+    try:
+        audio_path = download_media(media)
+        logger.info(
+            "Downloaded voice note media for %s to %s (content_type=%s)",
+            sender_number,
+            audio_path,
+            getattr(media, "content_type", None),
+        )
+        transcript = get_asr_service().transcribe(audio_path, language_code=active_language)
+        reply = f"Transcription: {transcript}"
+        logger.info("Transcription complete for %s", sender_number)
+    except RuntimeError as exc:
+        reply = f"Model access problem: {exc}"
+        logger.exception("Model access issue while processing voice note")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("ASR failed")
+        reply = (
+            "I could not transcribe that audio yet. "
+            f"Error: {exc.__class__.__name__}. "
+            "If this was an OGG voice note, make sure ffmpeg is installed."
+        )
+    finally:
+        if "audio_path" in locals():
+            audio_path.unlink(missing_ok=True)
+
+    try:
+        message_sid = send_whatsapp_message(sender_number, reply)
+        logger.info("Sent async WhatsApp reply to %s sid=%s", sender_number, message_sid)
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to send async WhatsApp reply")
 
 
 @app.post("/asr/transcribe")
@@ -81,15 +130,37 @@ async def transcribe_upload(
 
 
 async def _handle_whatsapp_webhook(request: Request, language_code: str | None = None) -> Response:
-    from asr import get_asr_service
-
+    logger.info(
+        "WhatsApp webhook request arrived path=%s content_type=%s",
+        request.url.path,
+        request.headers.get("content-type"),
+    )
     form = await request.form()
     payload = {key: value for key, value in form.items()}
+    sender_number = (payload.get("From") or "").strip()
+    num_media = payload.get("NumMedia")
+    media_url0 = payload.get("MediaUrl0")
+    media_type0 = payload.get("MediaContentType0")
+    logger.info(
+        "Inbound WhatsApp webhook from=%s num_media=%s media_url0=%s media_type0=%s body=%s",
+        sender_number,
+        num_media,
+        bool(media_url0),
+        media_type0,
+        (payload.get("Body") or "").strip(),
+    )
 
     message_text = (payload.get("Body") or "").strip()
     hinted_language = parse_language_hint(message_text)
     media = extract_first_media(payload)
     active_language = language_code or hinted_language
+    if media is not None:
+        logger.info(
+            "Media detected in inbound WhatsApp webhook from=%s url_present=%s content_type=%s",
+            sender_number,
+            bool(getattr(media, "url", None)),
+            getattr(media, "content_type", None),
+        )
 
     if media is None:
         reply = (
@@ -98,23 +169,26 @@ async def _handle_whatsapp_webhook(request: Request, language_code: str | None =
         )
         return Response(content=build_twiml_reply(reply), media_type="application/xml")
 
-    audio_path = download_media(media)
-    try:
-        transcript = get_asr_service().transcribe(audio_path, language_code=active_language)
-        reply = f"Transcription: {transcript}"
-    except RuntimeError as exc:
-        reply = f"Model access problem: {exc}"
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("ASR failed")
-        reply = (
-            "I could not transcribe that audio yet. "
-            f"Error: {exc.__class__.__name__}. "
-            "If this was an OGG voice note, make sure ffmpeg is installed."
+    if not sender_number:
+        logger.warning("Received voice note without sender number; cannot send async reply.")
+        return Response(
+            content=build_twiml_reply(
+                "I received your voice note, but I could not identify the sender."
+            ),
+            media_type="application/xml",
         )
-    finally:
-        audio_path.unlink(missing_ok=True)
 
-    return Response(content=build_twiml_reply(reply), media_type="application/xml")
+    background_tasks = BackgroundTasks()
+    background_tasks.add_task(process_voice_note_audio, media, sender_number, active_language)
+
+    return Response(
+        content=build_twiml_reply(
+            "I got your voice note and I am transcribing it now. "
+            "I will send the result here in a moment."
+        ),
+        media_type="application/xml",
+        background=background_tasks,
+    )
 
 
 @app.post("/webhook/whatsapp")
