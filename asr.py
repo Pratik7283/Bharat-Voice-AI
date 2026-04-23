@@ -14,7 +14,7 @@ from pydub import AudioSegment
 from pydub.exceptions import CouldntDecodeError
 from transformers import AutoModel
 
-from config import SUPPORTED_LANGUAGE_CODES, settings
+from config import LANGUAGE_NAME_TO_CODE, settings
 
 
 logger = logging.getLogger(__name__)
@@ -47,10 +47,11 @@ class ASRService:
         return self._model
 
     @staticmethod
-    def _language_name(language_code: str | None) -> str | None:
+    def _language_code(language_code: str | None) -> str | None:
         if not language_code:
             return None
-        return SUPPORTED_LANGUAGE_CODES.get(language_code.lower().strip())
+        value = language_code.lower().strip()
+        return LANGUAGE_NAME_TO_CODE.get(value, value)
 
     @staticmethod
     def _load_audio(audio_path: str | Path) -> tuple[np.ndarray, int]:
@@ -99,8 +100,8 @@ class ASRService:
         audio, sample_rate = self._load_audio(audio_path)
         wav_tensor = torch.from_numpy(audio).unsqueeze(0)
 
-        language_name = self._language_name(language_code) or "hi"
-        result = model(wav_tensor, language_name, "ctc")
+        language_code = self._language_code(language_code) or "hi"
+        result = model(wav_tensor, language_code, "ctc")
         return str(result).strip()
 
 
