@@ -55,22 +55,26 @@ def parse_language_hint(text: str | None) -> str | None:
 
 
 def extract_first_media(form_data: Mapping[str, str]) -> MediaItem | None:
-    try:
-        num_media = int(form_data.get("NumMedia", "0"))
-    except (TypeError, ValueError):
-        num_media = 0
+    media_indices: list[int] = []
+    for key in form_data.keys():
+        if not key.startswith("MediaUrl"):
+            continue
+        index_text = key.removeprefix("MediaUrl")
+        try:
+            media_indices.append(int(index_text))
+        except ValueError:
+            continue
 
-    if num_media <= 0:
-        return None
+    for index in sorted(media_indices):
+        url = form_data.get(f"MediaUrl{index}")
+        if not url:
+            continue
+        return MediaItem(
+            url=url,
+            content_type=form_data.get(f"MediaContentType{index}"),
+        )
 
-    url = form_data.get("MediaUrl0")
-    if not url:
-        return None
-
-    return MediaItem(
-        url=url,
-        content_type=form_data.get("MediaContentType0"),
-    )
+    return None
 
 
 def _suffix_from_content_type(content_type: str | None) -> str:
