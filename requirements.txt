@@ -1,0 +1,31 @@
+# Core backend
+fastapi
+uvicorn[standard]
+# Database
+psycopg2-binary
+# Telegram
+python-telegram-bot[all]
+# Audio
+pydub
+soundfile
+torchaudio
+# Scheduling
+APScheduler
+# AI / model tooling
+torch
+transformers
+huggingface_hub[cli]
+sentencepiece
+# Optional but commonly needed with HF models
+accelerate
+numpy
+
+torch
+torchaudio
+transformers
+huggingface_hub
+accelerate
+sentencepiece
+soundfile
+scipy
+TTS
