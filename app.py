@@ -8,7 +8,6 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 
-from asr import get_asr_service
 from config import settings
 from whatsapp import build_twiml_reply, download_media, extract_first_media, parse_language_hint
 
@@ -50,6 +49,8 @@ async def transcribe_upload(
     file: UploadFile = File(...),
     language_code: str | None = Form(default=None),
 ) -> JSONResponse:
+    from asr import get_asr_service
+
     settings.temp_dir.mkdir(parents=True, exist_ok=True)
 
     content = await file.read()
@@ -80,6 +81,8 @@ async def transcribe_upload(
 
 
 async def _handle_whatsapp_webhook(request: Request, language_code: str | None = None) -> Response:
+    from asr import get_asr_service
+
     form = await request.form()
     payload = {key: value for key, value in form.items()}
 
