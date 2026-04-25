@@ -134,3 +134,31 @@ def send_whatsapp_message(to_number: str, body: str) -> str:
     except Exception as exc:
         logger.error("Twilio API error: %s", exc)
         raise
+
+
+def send_whatsapp_media(to_number: str, media_url: str, body: str | None = None) -> str:
+    if settings.whatsapp_provider != "twilio":
+        raise NotImplementedError("Only Twilio is wired for outbound sending in Day 1.")
+    if not settings.twilio_account_sid or not settings.twilio_auth_token or not settings.twilio_whatsapp_number:
+        raise ValueError("Twilio settings are missing from .env")
+
+    logger.info(
+        "Sending Twilio media message  from=%s  to=%s  media_url=%s",
+        settings.twilio_whatsapp_number,
+        to_number,
+        media_url,
+    )
+
+    client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+    try:
+        message = client.messages.create(
+            from_=settings.twilio_whatsapp_number,
+            to=to_number,
+            body=body,
+            media_url=[media_url],
+        )
+        logger.info("Twilio media message created  SID=%s  status=%s", message.sid, message.status)
+        return message.sid
+    except Exception as exc:
+        logger.error("Twilio media API error: %s", exc)
+        raise

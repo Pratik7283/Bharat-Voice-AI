@@ -4,3 +4,4 @@ __pycache__/
 tmp/
 *.pyc
 .pytest_cache/
+external/

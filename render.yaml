@@ -10,6 +10,16 @@ services:
         value: 3.11.11
       - key: WHATSAPP_PROVIDER
         value: twilio
+      - key: ASR_PROVIDER
+        value: local
+      - key: TTS_PROVIDER
+        value: indictts
+      - key: LOCAL_WHISPER_BACKEND
+        value: auto
+      - key: LOCAL_WHISPER_MODEL_SIZE
+        value: small
+      - key: LOCAL_WHISPER_COMPUTE_TYPE
+        value: int8
       - key: ASR_DEVICE
         value: cpu
       - key: TEMP_DIR
